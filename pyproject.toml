@@ -24,3 +24,5 @@ quote-style = "double"
 indent-style = "tab"
 docstring-code-format = true
 
+[tool.bench.frappe-dependencies]
+frappe = ">=14.0.0,<15.0.0"
