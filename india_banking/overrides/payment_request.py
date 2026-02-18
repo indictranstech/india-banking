@@ -28,6 +28,7 @@ class BankPaymentRequest(PaymentRequest):
 			)
 
 	def validate(self):
+		set_supplier_bank_details(self)
 		if not self.net_total:
 			self.net_total = self.grand_total
 
@@ -119,7 +120,8 @@ class BankPaymentRequest(PaymentRequest):
 		if not self.grand_total or not self.net_total:
 			frappe.throw(_("Amount cannot be zero"))
 
-		self.validate_bank_account()
+		# self.validate_bank_account()
+		self.custom_validate_bank_account()
 		self.validate_currency()
 
 	def validate_currency(self):
@@ -132,6 +134,7 @@ class BankPaymentRequest(PaymentRequest):
 		transaction_currency = frappe.get_value(
 			self.party_type, self.party, currency_field
 		) or get_company_currency(self.company)
+
 		if transaction_currency != self.currency:
 			frappe.throw(f"Transaction currency must be in {transaction_currency}")
 
@@ -198,6 +201,107 @@ class BankPaymentRequest(PaymentRequest):
 					)
 				)
 
+	def custom_validate_bank_account(self):
+		if self.party_type == "Supplier":
+			# if not self.bank_account:
+			# 	if validate_party_bank_account_details(self, update=True):
+			# 		return
+
+			# supplier_bank_account = get_party_bank_account(self.party_type, self.party)
+			supplier_bank_account = frappe.db.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1})
+			# print("\n\n*********************** supplier_bank_account: ",supplier_bank_account)
+			if not self.custom_supplier_bank_account:
+				if not supplier_bank_account:
+					frappe.throw(
+						_(
+							"Default Supplier Bank Account is missing for {0} - {1}".format(
+								self.party_type, frappe.bold(self.party)
+							)
+						)
+					)
+				else:
+					self.custom_supplier_bank_account = supplier_bank_account
+
+			supplier_bank_account = frappe.get_doc("Supplier Bank Account", self.custom_supplier_bank_account)
+			if frappe.db.get_single_value(
+				"India Banking Settings", "activate_workflow_on_bank_account"
+			):
+				if supplier_bank_account.workflow_state != "Approved":
+					frappe.throw(
+						title=_("Cannot proceed with un-approved bank account"),
+						msg=_(
+							"{}-{}- Supplier Bank Account {}".format(
+								self.party_type,
+								self.party,
+								get_link_to_form("Supplier Bank Account", supplier_bank_account.name),
+							)
+						),
+					)
+
+			if supplier_bank_account.currency != self.currency:
+				frappe.throw(
+					title="Invalid currency",
+					msg=_(
+						f"The party supplier bank account currency ({bold(supplier_bank_account.currency)})  and the transaction currency ({bold(self.currency)}) cannot be different. Please select a matching currency."
+					),
+				)
+
+		else:
+
+			if not self.bank_account:
+				if validate_party_bank_account_details(self, update=True):
+					return
+
+			bank_account = get_party_bank_account(self.party_type, self.party)
+			if not self.bank_account:
+				if not bank_account:
+					frappe.throw(
+						_(
+							"Default Bank Account is missing for {0} - {1}".format(
+								self.party_type, frappe.bold(self.party)
+							)
+						)
+					)
+				else:
+					self.bank_account = bank_account
+
+			bank_account = frappe.get_doc("Bank Account", self.bank_account)
+			if frappe.db.get_single_value(
+				"India Banking Settings", "activate_workflow_on_bank_account"
+			):
+				if bank_account.workflow_state != "Approved":
+					frappe.throw(
+						title=_("Cannot proceed with un-approved bank account"),
+						msg=_(
+							"{}-{}- Bank Account {}".format(
+								self.party_type,
+								self.party,
+								get_link_to_form("Bank Account", bank_account.name),
+							)
+						),
+					)
+
+			if bank_account.currency != self.currency:
+				frappe.throw(
+					title="Invalid currency",
+					msg=_(
+						f"The party bank account currency ({bold(bank_account.currency)})  and the transaction currency ({bold(self.currency)}) cannot be different. Please select a matching currency."
+					),
+				)
+
+			if self.bank_account:
+				bank_account_company = frappe.db.get_value(
+					"Bank Account", self.bank_account, "company"
+				)
+				if self.company != bank_account_company:
+					frappe.throw(
+						_(
+							"Bank Account <b>{0}</b> is not valid for company <b>{1}</b>".format(
+								self.bank_account, self.company
+							)
+						)
+					)
+
 	def calculate_pr_tds(self, amount):
 		doc = self
 		doc.supplier = self.party
@@ -214,6 +318,7 @@ class BankPaymentRequest(PaymentRequest):
 
 @frappe.whitelist()
 def make_payment_order(source_name, target_doc=None):
+	# print("\n\n ^^^^^^^^^^^^^^^^^^ customm  calling from ovrride make_payment_order ")
 	from frappe.model.mapper import get_mapped_doc
 
 	def set_missing_values(source, target):
@@ -240,6 +345,11 @@ def make_payment_order(source_name, target_doc=None):
 			"cost_center": source.cost_center,
 			"project": source.project,
 			"tax_withholding_category": source.tax_withholding_category,
+			"custom_supplier_bank_account": source.custom_supplier_bank_account,
+			"bank": source.bank,
+			"bank_account_no": source.bank_account_no,
+			"branch_code": source.branch_code,
+			"account_name": source.bank_account_no,
 		}
 		reference.update(_update_dimensions(source))
 
@@ -262,3 +372,24 @@ def make_payment_order(source_name, target_doc=None):
 	)
 
 	return doclist
+
+def set_supplier_bank_details(self, method=None):
+
+	# Only for Supplier
+	if self.party_type != "Supplier":
+		return
+
+	# Get default supplier bank account details
+	supplier_bank = frappe.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1, "docstatus": 1},
+		["name", "bank_name", "account_number", "iban", "ifsc_code"], as_dict=True)
+
+	# print("\n\n\n\n ---------------------supplier_bank:",supplier_bank)
+	if not supplier_bank:
+		return
+
+	# Set bank details from Supplier Bank Account
+	self.custom_supplier_bank_account = supplier_bank.name
+	self.bank = supplier_bank.bank_name
+	self.bank_account_no = supplier_bank.account_number
+	self.branch_code = supplier_bank.ifsc_code
+	self.iban = supplier_bank.iban
