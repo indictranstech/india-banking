@@ -310,9 +310,9 @@ class CustomPaymentOrder(PaymentOrder):
 						d.get(source_field, "") if source_field else "",
 					)
 
-
+#this is original method
 @frappe.whitelist()
-def get_party_summary(
+def old_get_party_summary(
 	references,
 	company_bank_account,
 	summarise_payment_based_on=None,
@@ -407,3 +407,113 @@ def get_mode_of_transfer(
 		)
 
 	return mode_of_transfer
+
+#this is custom for supplier bank details
+@frappe.whitelist()
+def get_party_summary(
+	references,
+	company_bank_account,
+	summarise_payment_based_on=None,
+	default_mode_of_transfer=None,
+):
+	print("\n custom get_party_summary callingkkkkkkkkkkkkkkkkkkkkkkkkk")
+	references = json.loads(references)
+	if not len(references) or not company_bank_account:
+		return
+
+	# Considering the following dimensions to group payments
+	def _get_unique_key(reference=None, summarise_field_only=False):
+		summarise_field = PAYMENT_SUMMARY_FIELDS.copy()
+		summarise_field.extend(get_accounting_dimensions())
+		supp_acc = ["custom_supplier_bank_account", "bank" , "bank_account_no", "branch_code", "account_name"]
+		summarise_field.extend(supp_acc)
+		print("\n custom method summarise_field:",summarise_field)
+
+		if summarise_payment_based_on == "Party":
+			summarise_field.remove("reference_name")
+
+		if summarise_field_only:
+			return tuple(summarise_field)
+		else:
+			return tuple([reference.get(field, "") for field in summarise_field])
+
+	summary = {}
+	for reference in references:
+		reference = frappe._dict(reference)
+		key = _get_unique_key(reference)
+
+		if key in summary:
+			summary[key]["amount"] += reference.amount
+
+		else:
+			summary[key] = {
+				"amount": reference.amount,
+			}
+
+	result = []
+	for key, val in summary.items():
+		summary_line_item = {
+			k: v for k, v in zip(_get_unique_key(summarise_field_only=True), key)
+		}
+
+		if summary_line_item["party_type"] == "Supplier":
+			print("\n summary_line_item: ",summary_line_item)
+			if not summary_line_item["custom_supplier_bank_account"]:
+			# if not summary_line_item["custom_supplier_bank_account"]:
+				if not validate_party_bank_account_details(summary_line_item, update=True):
+					frappe.throw(
+						_(
+							f"Supplier Bank Account is not set for {summary_line_item['party_type']} - {summary_line_item['party']}"
+						)
+					)
+			party_bank = frappe.db.get_value(
+				"Supplier Bank Account", summary_line_item["custom_supplier_bank_account"], "bank_name"
+			)
+
+			company_bank = frappe.db.get_value("Bank Account", company_bank_account, "bank")
+
+			summary_line_item.update(
+				{
+					"amount": val.get("amount"),
+					"mode_of_transfer": get_mode_of_transfer(
+						val.get("amount"),
+						party_bank,
+						company_bank,
+						default_mode_of_transfer,
+					),
+				}
+			)
+
+			result.append(summary_line_item)
+
+		else:
+
+			if not summary_line_item["bank_account"]:
+			# if not summary_line_item["custom_supplier_bank_account"]:
+				if not validate_party_bank_account_details(summary_line_item, update=True):
+					frappe.throw(
+						_(
+							f"Bank Account is not set for {summary_line_item['party_type']} - {summary_line_item['party']}"
+						)
+					)
+			party_bank = frappe.db.get_value(
+				"Bank Account", summary_line_item["bank_account"], "bank"
+			)
+
+			company_bank = frappe.db.get_value("Bank Account", company_bank_account, "bank")
+
+			summary_line_item.update(
+				{
+					"amount": val.get("amount"),
+					"mode_of_transfer": get_mode_of_transfer(
+						val.get("amount"),
+						party_bank,
+						company_bank,
+						default_mode_of_transfer,
+					),
+				}
+			)
+
+			result.append(summary_line_item)
+
+	return result
