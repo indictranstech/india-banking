@@ -117,6 +117,7 @@ def create_outward_payment_entry(
 		pe.cost_center = row.cost_center
 		pe.project = row.project
 		pe.posting_date = nowdate()
+		pe.custom_is_created_against_payment_order = 1
 		if frappe.get_single(
 			"India Banking Settings"
 		).use_payment_order_date_as_payment_entry_date:
