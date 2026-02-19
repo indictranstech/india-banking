@@ -1,6 +1,7 @@
 frappe.ui.form.on("Payment Request", {
 	onload_post_render(frm) {
 		set_bank_account_query(frm);
+		set_supplier_bank_account_query(frm);
 		frm.events.toggle_message_display(frm);
 	},
 	refresh(frm) {
@@ -18,18 +19,22 @@ frappe.ui.form.on("Payment Request", {
 
 		set_payment_type_query(frm);
 		set_bank_account_query(frm);
+		set_supplier_bank_account_query(frm);
 	},
 	company(frm) {
 		set_payment_type_query(frm);
 	},
 	mode_of_payment(frm) {
 		set_bank_account_query(frm);
+		set_supplier_bank_account_query(frm);
 	},
 	party_type(frm) {
 		set_bank_account_query(frm);
+		set_supplier_bank_account_query(frm);
 	},
 	party(frm) {
 		set_bank_account_query(frm);
+		set_supplier_bank_account_query(frm);
 	},
 	payment_request_type(frm) {
 		frm.events.toggle_message_display(frm);
@@ -74,6 +79,31 @@ function get_bank_query_conditions(frm) {
 	}
 	if (frm.doc.party) {
 		conditions["party"] = frm.doc.party;
+	}
+	return conditions;
+}
+
+function set_supplier_bank_account_query(frm) {
+	let conditions = get_supplier_bank_query_conditions(frm);
+	frm.set_query("custom_supplier_bank_account", function () {
+		return {
+			filters: conditions,
+		};
+	});
+}
+
+function get_supplier_bank_query_conditions(frm) {
+	let conditions = {
+		disabled: 0,
+	};
+	frappe.db.get_single_value("India Banking Settings", "activate_workflow_on_bank_account").then((r) => {
+		if (r) {
+			conditions["workflow_state"] = "Approved";
+		}
+	});
+
+	if (frm.doc.party) {
+		conditions["supplier"] = frm.doc.party;
 	}
 	return conditions;
 }

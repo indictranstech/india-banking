@@ -208,7 +208,7 @@ class BankPaymentRequest(PaymentRequest):
 			# 		return
 
 			# supplier_bank_account = get_party_bank_account(self.party_type, self.party)
-			supplier_bank_account = frappe.db.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1})
+			supplier_bank_account = frappe.db.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1, "docstatus":1, "workflow_state": "Approved", "disabled": 0})
 			# print("\n\n*********************** supplier_bank_account: ",supplier_bank_account)
 			if not self.custom_supplier_bank_account:
 				if not supplier_bank_account:
@@ -380,7 +380,7 @@ def set_supplier_bank_details(self, method=None):
 		return
 
 	# Get default supplier bank account details
-	supplier_bank = frappe.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1, "docstatus": 1},
+	supplier_bank = frappe.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1, "docstatus": 1, "workflow_state": "Approved", "disabled": 0},
 		["name", "bank_name", "account_number", "iban", "ifsc_code"], as_dict=True)
 
 	# print("\n\n\n\n ---------------------supplier_bank:",supplier_bank)
