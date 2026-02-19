@@ -145,7 +145,7 @@ class CustomPaymentOrder(PaymentOrder):
 			return
 
 		if self.payment_order_type == "Payment Request" and (
-			not frappe.get_single_value(
+			not frappe.db.get_single_value(
 				"India Banking Settings", "create_payment_after_success"
 			)
 		):

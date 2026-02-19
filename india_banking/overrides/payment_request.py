@@ -385,7 +385,9 @@ def set_supplier_bank_details(self, method=None):
 
 	# print("\n\n\n\n ---------------------supplier_bank:",supplier_bank)
 	if not supplier_bank:
-		return
+		frappe.throw(
+        _("Please set a Default Supplier Bank Account for Supplier '{0}'.").format(self.party)
+    )
 
 	# Set bank details from Supplier Bank Account
 	self.custom_supplier_bank_account = supplier_bank.name
