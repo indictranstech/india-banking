@@ -54,6 +54,7 @@ class CustomPaymentOrder(PaymentOrder):
 
 	def validate(self):
 		self.validate_summary()
+		set_bank_details_on_validate(self)
 
 	def validate_summary(self):
 		if not self.summary:
@@ -456,18 +457,19 @@ def get_party_summary(
 			k: v for k, v in zip(_get_unique_key(summarise_field_only=True), key)
 		}
 
-		if summary_line_item["party_type"] == "Supplier":
+		# if summary_line_item["party_type"] == "Supplier":
+		if summary_line_item["party_type"] in ["Supplier", "Employee"]:
 			print("\n summary_line_item: ",summary_line_item)
 			if not summary_line_item["custom_supplier_bank_account"]:
-			# if not summary_line_item["custom_supplier_bank_account"]:
+			# 	if not supplier_bank:
 				if not validate_party_bank_account_details(summary_line_item, update=True):
 					frappe.throw(
 						_(
-							f"Supplier Bank Account is not set for {summary_line_item['party_type']} - {summary_line_item['party']}"
+							f"Party Bank Account is not set for {summary_line_item['party_type']} - {summary_line_item['party']}"
 						)
 					)
 			party_bank = frappe.db.get_value(
-				"Supplier Bank Account", summary_line_item["custom_supplier_bank_account"], "bank_name"
+				"Party Bank Account", summary_line_item["custom_supplier_bank_account"], "bank_name"
 			)
 
 			company_bank = frappe.db.get_value("Bank Account", company_bank_account, "bank")
@@ -517,3 +519,35 @@ def get_party_summary(
 			result.append(summary_line_item)
 
 	return result
+
+def set_bank_details_on_validate(self):
+
+    def update_bank_details(row):
+        if not row.custom_supplier_bank_account:
+            return
+
+        supplier_bank_details = frappe.get_value(
+            "Party Bank Account",
+            {
+                "name": row.custom_supplier_bank_account,
+                "docstatus": 1,
+                "disabled": 0
+            },
+            ["bank_name", "account_number", "iban", "ifsc_code"],
+            as_dict=True,
+        )
+
+        if supplier_bank_details:
+            row.bank = supplier_bank_details.bank_name
+            row.bank_account_no = supplier_bank_details.account_number
+            row.branch_code = supplier_bank_details.ifsc_code
+            row.account_name = supplier_bank_details.account_number
+
+    # Update References
+    for ref in self.references or []:
+        update_bank_details(ref)
+
+    # Update Summary
+    for summ in self.summary or []:
+        update_bank_details(summ)
+
