@@ -522,32 +522,32 @@ def get_party_summary(
 
 def set_bank_details_on_validate(self):
 
-    def update_bank_details(row):
-        if not row.custom_supplier_bank_account:
-            return
+	def update_bank_details(row):
+		if not row.custom_supplier_bank_account:
+			return
 
-        supplier_bank_details = frappe.get_value(
-            "Party Bank Account",
-            {
-                "name": row.custom_supplier_bank_account,
-                "docstatus": 1,
-                "disabled": 0
-            },
-            ["bank_name", "account_number", "iban", "ifsc_code"],
-            as_dict=True,
-        )
+		supplier_bank_details = frappe.get_value(
+			"Party Bank Account",
+			{
+				"name": row.custom_supplier_bank_account,
+				"docstatus": 1,
+				"disabled": 0
+			},
+			["bank_name", "account_number", "iban", "ifsc_code"],
+			as_dict=True,
+		)
 
-        if supplier_bank_details:
-            row.bank = supplier_bank_details.bank_name
-            row.bank_account_no = supplier_bank_details.account_number
-            row.branch_code = supplier_bank_details.ifsc_code
-            row.account_name = supplier_bank_details.account_number
+		if supplier_bank_details:
+			row.bank = supplier_bank_details.bank_name
+			row.bank_account_no = supplier_bank_details.account_number
+			row.branch_code = supplier_bank_details.ifsc_code
+			row.account_name = supplier_bank_details.account_number
 
-    # Update References
-    for ref in self.references or []:
-        update_bank_details(ref)
+	# Update References
+	for ref in self.references or []:
+		update_bank_details(ref)
 
-    # Update Summary
-    for summ in self.summary or []:
-        update_bank_details(summ)
+	# Update Summary
+	for summ in self.summary or []:
+		update_bank_details(summ)
 

@@ -12,53 +12,114 @@ from pypika.terms import ExistsCriterion
 def make_payment_order(source_name, target_doc=None, args=None):
 	from frappe.model.mapper import get_mapped_doc
 
-	def validate_party_bank_account(
-		party_details, party_bank_details, invalid_party_details
-	):
+	# def validate_party_bank_account(
+	# 	party_details, party_bank_details, invalid_party_details
+	# ):
+	# 	for party_detail in party_details:
+	# 		party_type, party = party_detail.values()
+	# 		msg = ""
+	# 		if (party_type, party) in party_bank_details:
+	# 			continue
+
+	# 		bank_account = frappe.get_value(
+	# 			"Bank Account",
+	# 			{
+	# 				"party_type": party_type,
+	# 				"party": party,
+	# 			},
+	# 			["name", "disabled", "is_default"],
+	# 			as_dict=1,
+	# 		)
+
+	# 		if not bank_account:
+	# 			msg += f"<b>{party_type}-{party}</b> does not have a bank account.<br>"
+	# 		if bank_account and not bank_account.is_default:
+	# 			msg += f"<b>{party_type}-{party}</b> has no default bank account.<br>"
+	# 		if bank_account and bank_account.disabled:
+	# 			bank_account_link = get_link_to_form("Bank Account", bank_account.name)
+	# 			msg += f"<b>{party_type}-{party}</b> bank account {bank_account_link} is disabled.<br>"
+
+	# 		if msg:
+	# 			if msg not in invalid_party_details:
+	# 				invalid_party_details.append(msg)
+	# 		else:
+	# 			party_bank_details.update({(party_type, party): bank_account.name})
+
+
+	def validate_party_bank_account(party_details, party_bank_details, invalid_party_details):
 		for party_detail in party_details:
 			party_type, party = party_detail.values()
 			msg = ""
+
 			if (party_type, party) in party_bank_details:
 				continue
 
-			bank_account = frappe.get_value(
-				"Bank Account",
-				{
-					"party_type": party_type,
-					"party": party,
-				},
-				["name", "disabled", "is_default"],
-				as_dict=1,
-			)
+			bank_account = None
 
+			# If Supplier → fetch from Paty Bank Account
+			if party_type in ["Supplier", "Employee"]:
+				bank_account = frappe.get_value(
+					"Party Bank Account",
+					{
+						"party_type": party_type,
+						"party" : party
+					},
+					["name", "disabled", "is_default"],
+					as_dict=1,
+				)
+
+				doctype = "Party Bank Account"
+
+			# For other party types → fetch from Bank Account
+			else:
+				bank_account = frappe.get_value(
+					"Bank Account",
+					{
+						"party_type": party_type,
+						"party": party,
+					},
+					["name", "disabled", "is_default"],
+					as_dict=1,
+				)
+
+				doctype = "Bank Account"
+			# Validations
 			if not bank_account:
 				msg += f"<b>{party_type}-{party}</b> does not have a bank account.<br>"
+
 			if bank_account and not bank_account.is_default:
 				msg += f"<b>{party_type}-{party}</b> has no default bank account.<br>"
-			if bank_account and bank_account.disabled:
-				bank_account_link = get_link_to_form("Bank Account", bank_account.name)
-				msg += f"<b>{party_type}-{party}</b> bank account {bank_account_link} is disabled.<br>"
 
+			if bank_account and bank_account.disabled:
+				bank_account_link = get_link_to_form(doctype, bank_account.name)
+				msg += (
+					f"<b>{party_type}-{party}</b> bank account "
+					f"{bank_account_link} is disabled.<br>"
+				)
+
+			#  Collect invalid details
 			if msg:
 				if msg not in invalid_party_details:
 					invalid_party_details.append(msg)
 			else:
-				party_bank_details.update({(party_type, party): bank_account.name})
+				party_bank_details.update(
+					{(party_type, party): bank_account.name}
+				)
+
 
 	def update_bank_entry(source, target):
 		net_payable = 0
 		net_receivable = 0
-
 		party_receivables = {}
 		invalid_party_details = []
 		party_bank_details = {}
-
 		if source.accounts:
 			party_details = [
 				{"party_type": acc.party_type, "party": acc.party}
 				for acc in source.accounts
 				if acc.party_type and acc.party
 			]
+			
 			validate_party_bank_account(
 				party_details, party_bank_details, invalid_party_details
 			)
@@ -106,7 +167,6 @@ def make_payment_order(source_name, target_doc=None, args=None):
 							)
 							net_receivable += receivables
 							party_receivables[key].payable_amount = receivables
-
 			amount = net_payable + net_receivable
 			if amount > 0:
 				entry_link = get_link_to_form("Journal Entry", source.name)
@@ -171,11 +231,16 @@ def make_payment_order(source_name, target_doc=None, args=None):
 				"party_type": journal_account.party_type,
 				"party": journal_account.party,
 				"mode_of_payment": "",
-				"bank_account": journal_account.party_bank_account,
+				# "bank_account": journal_account.party_bank_account,
 				"account": journal_account.account,
 				"project": journal_account.project,
 				"cost_center": journal_account.cost_center,
 			}
+			if journal_account.party_type in ["Supplier", "Employee"]:
+				details["custom_supplier_bank_account"] = journal_account.party_bank_account
+			else:
+				details["bank_account"] = journal_account.party_bank_account
+			
 			details.update(_update_dimensions(journal_account))
 
 			target.append("references", details)
