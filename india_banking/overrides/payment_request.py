@@ -202,19 +202,20 @@ class BankPaymentRequest(PaymentRequest):
 				)
 
 	def custom_validate_bank_account(self):
-		if self.party_type == "Supplier":
+		# if self.party_type == "Supplier":
+		if self.party_type in ["Supplier", "Employee"]:
 			# if not self.bank_account:
 			# 	if validate_party_bank_account_details(self, update=True):
 			# 		return
 
 			# supplier_bank_account = get_party_bank_account(self.party_type, self.party)
-			supplier_bank_account = frappe.db.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1, "docstatus":1, "disabled": 0})
+			supplier_bank_account = frappe.db.get_value("Party Bank Account", {"party": self.party, "party_type": self.party_type, "is_default": 1, "docstatus":1, "disabled": 0})
 			# print("\n\n*********************** supplier_bank_account: ",supplier_bank_account)
 			if not self.custom_supplier_bank_account:
 				if not supplier_bank_account:
 					frappe.throw(
 						_(
-							"Default Supplier Bank Account is missing for {0} - {1}".format(
+							"Default Party Bank Account is missing for {0} - {1}".format(
 								self.party_type, frappe.bold(self.party)
 							)
 						)
@@ -222,7 +223,7 @@ class BankPaymentRequest(PaymentRequest):
 				else:
 					self.custom_supplier_bank_account = supplier_bank_account
 
-			supplier_bank_account = frappe.get_doc("Supplier Bank Account", self.custom_supplier_bank_account)
+			supplier_bank_account = frappe.get_doc("Party Bank Account", self.custom_supplier_bank_account)
 			if frappe.db.get_single_value(
 				"India Banking Settings", "activate_workflow_on_bank_account"
 			):
@@ -230,10 +231,10 @@ class BankPaymentRequest(PaymentRequest):
 					frappe.throw(
 						title=_("Cannot proceed with un-approved bank account"),
 						msg=_(
-							"{}-{}- Supplier Bank Account {}".format(
+							"{}-{}- Party Bank Account {}".format(
 								self.party_type,
 								self.party,
-								get_link_to_form("Supplier Bank Account", supplier_bank_account.name),
+								get_link_to_form("Party Bank Account", supplier_bank_account.name),
 							)
 						),
 					)
@@ -242,7 +243,7 @@ class BankPaymentRequest(PaymentRequest):
 				frappe.throw(
 					title="Invalid currency",
 					msg=_(
-						f"The party supplier bank account currency ({bold(supplier_bank_account.currency)})  and the transaction currency ({bold(self.currency)}) cannot be different. Please select a matching currency."
+						f"The party Party bank account currency ({bold(supplier_bank_account.currency)})  and the transaction currency ({bold(self.currency)}) cannot be different. Please select a matching currency."
 					),
 				)
 
@@ -376,22 +377,23 @@ def make_payment_order(source_name, target_doc=None):
 def set_supplier_bank_details(self, method=None):
 
 	# Only for Supplier
-	if self.party_type != "Supplier":
+	if self.party_type not in ["Supplier", "Employee"]:
 		return
 
-	# Get default supplier bank account details
-	supplier_bank = frappe.get_value("Supplier Bank Account", {"supplier": self.party, "is_default": 1, "docstatus": 1, "disabled": 0},
+	# Get default Party bank account details
+	supplier_bank_details = frappe.get_value("Party Bank Account", {"party": self.party, "party_type": self.party_type, "is_default": 1, "docstatus": 1, "disabled": 0},
 		["name", "bank_name", "account_number", "iban", "ifsc_code"], as_dict=True)
 
 	# print("\n\n\n\n ---------------------supplier_bank:",supplier_bank)
-	if not supplier_bank:
+	if not supplier_bank_details:
 		frappe.throw(
-        _("Please set a Default Supplier Bank Account for Supplier '{0}'.").format(self.party)
-    )
+			_("Please set a Default Party Bank Account for {0} '{1}'.")
+			.format(self.party_type, self.party)
+		)
 
-	# Set bank details from Supplier Bank Account
-	self.custom_supplier_bank_account = supplier_bank.name
-	self.bank = supplier_bank.bank_name
-	self.bank_account_no = supplier_bank.account_number
-	self.branch_code = supplier_bank.ifsc_code
-	self.iban = supplier_bank.iban
+	# Set bank details from Party Bank Account
+	self.custom_supplier_bank_account = supplier_bank_details.name
+	self.bank = supplier_bank_details.bank_name
+	self.bank_account_no = supplier_bank_details.account_number
+	self.branch_code = supplier_bank_details.ifsc_code
+	self.iban = supplier_bank_details.iban

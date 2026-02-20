@@ -73,21 +73,22 @@ def make_payment_order(source_name, target_doc=None):
 		# 	return bank_account.name
 
 		def custom_get_default_bank_account(party_type, party):
-			if party_type == "Supplier":
-				if get_party_bank_fields(party_type):
-					return ""
+			# if party_type == "Supplier":
+			if party_type in ["Supplier", "Employee"]:
+				# if get_party_bank_fields(party_type):
+				# 	return ""
 				# party_bank_account = get_party_bank_account(party_type, party)
-				party_bank_account = frappe.db.get_value("Supplier Bank Account", {"supplier": party, "disabled": 0, "is_default": 1, "docstatus":1})
+				party_bank_account = frappe.db.get_value("Party Bank Account", {"party": party, "party_type": party_type, "disabled": 0, "is_default": 1, "docstatus":1})
 				if not party_bank_account:
 					frappe.throw(
 						_(
-							"Default Supplier Bank Account is missing for {0} - {1}".format(
+							"Default Party Bank Account is missing for {0} - {1}".format(
 								party_type, party
 							)
 						)
 					)
 
-				supplier_bank_account = frappe.get_doc("Supplier Bank Account", party_bank_account)
+				supplier_bank_account = frappe.get_doc("Party Bank Account", party_bank_account)
 				if frappe.db.get_single_value(
 					"India Banking Settings", "activate_workflow_on_bank_account"
 				):
@@ -211,7 +212,7 @@ def make_payment_order(source_name, target_doc=None):
 
 				if supplier_bank_account:
 					supplier_bank_details = frappe.get_value(
-						"Supplier Bank Account",
+						"Party Bank Account",
 						{
 							"name": supplier_bank_account,
 							"disabled": 0,
