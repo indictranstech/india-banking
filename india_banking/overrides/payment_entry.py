@@ -28,26 +28,129 @@ def make_payment_order(source_name, target_doc=None):
 				for dimension in get_accounting_dimensions()
 			}
 
-		def _get_default_bank_account(party_type, party):
-			if get_party_bank_fields(party_type):
-				return ""
-			party_bank_account = get_party_bank_account(party_type, party)
-			if not party_bank_account:
-				frappe.throw(
-					_(
-						"Default Bank Account is missing for {0} - {1}".format(
-							party_type, party
+		# def _get_default_bank_account(party_type, party):
+		# 	if get_party_bank_fields(party_type):
+		# 		return ""
+		# 	party_bank_account = get_party_bank_account(party_type, party)
+		# 	if not party_bank_account:
+		# 		frappe.throw(
+		# 			_(
+		# 				"Default Bank Account is missing for {0} - {1}".format(
+		# 					party_type, party
+		# 				)
+		# 			)
+		# 		)
+
+		# 	bank_account = frappe.get_doc("Bank Account", party_bank_account)
+		# 	if frappe.db.get_single_value(
+		# 		"India Banking Settings", "activate_workflow_on_bank_account"
+		# 	):
+		# 		if bank_account.workflow_state != "Approved":
+		# 			frappe.throw(
+		# 				title=_("Cannot proceed with un-approved bank account"),
+		# 				msg=_(
+		# 					"{}-{}- Bank Account <a href='{}'>{}</a>".format(
+		# 						party_type,
+		# 						party,
+		# 						get_url_to_form("Bank Account", bank_account.name),
+		# 						frappe.bold(bank_account.name),
+		# 					)
+		# 				),
+		# 			)
+
+		# 	if bank_account.currency != "INR":
+		# 		frappe.throw(
+		# 			title=_("The party bank account currency should be in INR."),
+		# 			msg=_(
+		# 				"{}-{}- Bank Account <a href='{}'>{}</a>".format(
+		# 					party_type,
+		# 					party,
+		# 					get_url_to_form("Bank Account", bank_account.name),
+		# 					frappe.bold(bank_account.name),
+		# 				)
+		# 			),
+		# 		)
+		# 	return bank_account.name
+
+		def custom_get_default_bank_account(party_type, party):
+			if party_type == "Supplier":
+				if get_party_bank_fields(party_type):
+					return ""
+				# party_bank_account = get_party_bank_account(party_type, party)
+				party_bank_account = frappe.db.get_value("Supplier Bank Account", {"supplier": party, "disabled": 0, "is_default": 1, "docstatus":1})
+				if not party_bank_account:
+					frappe.throw(
+						_(
+							"Default Supplier Bank Account is missing for {0} - {1}".format(
+								party_type, party
+							)
 						)
 					)
-				)
 
-			bank_account = frappe.get_doc("Bank Account", party_bank_account)
-			if frappe.db.get_single_value(
-				"India Banking Settings", "activate_workflow_on_bank_account"
-			):
-				if bank_account.workflow_state != "Approved":
+				supplier_bank_account = frappe.get_doc("Supplier Bank Account", party_bank_account)
+				if frappe.db.get_single_value(
+					"India Banking Settings", "activate_workflow_on_bank_account"
+				):
+					if supplier_bank_account.workflow_state != "Approved":
+						frappe.throw(
+							title=_("Cannot proceed with un-approved bank account"),
+							msg=_(
+								"{}-{}- Bank Account <a href='{}'>{}</a>".format(
+									party_type,
+									party,
+									get_url_to_form("Bank Account", supplier_bank_account.name),
+									frappe.bold(supplier_bank_account.name),
+								)
+							),
+						)
+
+				if supplier_bank_account.currency != "INR":
 					frappe.throw(
-						title=_("Cannot proceed with un-approved bank account"),
+						title=_("The party bank account currency should be in INR."),
+						msg=_(
+							"{}-{}- Bank Account <a href='{}'>{}</a>".format(
+								party_type,
+								party,
+								get_url_to_form("Bank Account", supplier_bank_account.name),
+								frappe.bold(supplier_bank_account.name),
+							)
+						),
+					)
+				return supplier_bank_account.name
+
+			else:
+				if get_party_bank_fields(party_type):
+					return ""
+				party_bank_account = get_party_bank_account(party_type, party)
+				if not party_bank_account:
+					frappe.throw(
+						_(
+							"Default Bank Account is missing for {0} - {1}".format(
+								party_type, party
+							)
+						)
+					)
+
+				bank_account = frappe.get_doc("Bank Account", party_bank_account)
+				if frappe.db.get_single_value(
+					"India Banking Settings", "activate_workflow_on_bank_account"
+				):
+					if bank_account.workflow_state != "Approved":
+						frappe.throw(
+							title=_("Cannot proceed with un-approved bank account"),
+							msg=_(
+								"{}-{}- Bank Account <a href='{}'>{}</a>".format(
+									party_type,
+									party,
+									get_url_to_form("Bank Account", bank_account.name),
+									frappe.bold(bank_account.name),
+								)
+							),
+						)
+
+				if bank_account.currency != "INR":
+					frappe.throw(
+						title=_("The party bank account currency should be in INR."),
 						msg=_(
 							"{}-{}- Bank Account <a href='{}'>{}</a>".format(
 								party_type,
@@ -57,46 +160,85 @@ def make_payment_order(source_name, target_doc=None):
 							)
 						),
 					)
+				return bank_account.name
 
-			if bank_account.currency != "INR":
-				frappe.throw(
-					title=_("The party bank account currency should be in INR."),
-					msg=_(
-						"{}-{}- Bank Account <a href='{}'>{}</a>".format(
-							party_type,
-							party,
-							get_url_to_form("Bank Account", bank_account.name),
-							frappe.bold(bank_account.name),
-						)
-					),
-				)
-			return bank_account.name
+
+		# def _get_reference_data(reference=None):
+		# 	#can we pass data from here reference data supplier_bank_account
+		# 	return {
+		# 		"reference_doctype": reference.reference_doctype
+		# 		if reference
+		# 		else "Payment Entry",
+		# 		"reference_name": reference.reference_name
+		# 		if reference
+		# 		else source.name,
+		# 		"amount": reference.allocated_amount
+		# 		if reference
+		# 		else source.paid_amount,
+		# 		"party_type": source.party_type,
+		# 		"party": source.party,
+		# 		"mode_of_payment": source.mode_of_payment
+		# 		if reference
+		# 		else "Wire Transfer",
+		# 		"bank_account": _get_default_bank_account(
+		# 			source.party_type, source.party
+		# 		),
+		# 		"account": account if reference else source.paid_to,
+		# 		"cost_center": source.cost_center,
+		# 		"project": source.project,
+		# 		"payment_entry": source.name,
+		# 		**_update_dimensions(source),
+		# 	}
 
 		def _get_reference_data(reference=None):
-			return {
-				"reference_doctype": reference.reference_doctype
-				if reference
-				else "Payment Entry",
-				"reference_name": reference.reference_name
-				if reference
-				else source.name,
-				"amount": reference.allocated_amount
-				if reference
-				else source.paid_amount,
+			data = {
+				"reference_doctype": reference.reference_doctype if reference else "Payment Entry",
+				"reference_name": reference.reference_name if reference else source.name,
+				"amount": reference.allocated_amount if reference else source.paid_amount,
 				"party_type": source.party_type,
 				"party": source.party,
-				"mode_of_payment": source.mode_of_payment
-				if reference
-				else "Wire Transfer",
-				"bank_account": _get_default_bank_account(
-					source.party_type, source.party
-				),
+				"mode_of_payment": source.mode_of_payment if reference else "Wire Transfer",
 				"account": account if reference else source.paid_to,
 				"cost_center": source.cost_center,
 				"project": source.project,
 				"payment_entry": source.name,
 				**_update_dimensions(source),
 			}
+
+			# Only modify bank fields if Supplier
+			if source.party_type == "Supplier":
+				supplier_bank_account = custom_get_default_bank_account(source.party_type, source.party)
+
+				if supplier_bank_account:
+					supplier_bank_details = frappe.get_value(
+						"Supplier Bank Account",
+						{
+							"name": supplier_bank_account,
+							"disabled": 0,
+							"docstatus": 1,
+							"is_default": 1
+						},
+						["bank_name", "account_number", "iban", "ifsc_code"],
+						as_dict=True,
+					)
+
+					if supplier_bank_details:
+						data.update({
+							"custom_supplier_bank_account": supplier_bank_account,
+							"bank": supplier_bank_details.bank_name,
+							"branch_code": supplier_bank_details.ifsc_code,
+							"account_name": supplier_bank_details.account_number,
+							"bank_account_no": supplier_bank_details.account_number,
+						})
+
+			else:
+				# For Customer / Employee keep existing default logic
+				data["bank_account"] = custom_get_default_bank_account(
+					source.party_type, source.party
+				)
+
+			return data
+
 
 		for reference in source.references:
 			target.append("references", _get_reference_data(reference))
