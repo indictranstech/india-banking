@@ -28,6 +28,9 @@ class PartyBankAccountFieldMap(Document):
 @frappe.whitelist()
 def get_party_bank_fields(party_type=None):
 	if party_type:
+		if party_type == "Development Apprentice Master":
+			party_type = "Employee"
+		
 		FM = DocType("Field Map")
 		party_bank_fields = (
 			frappe.qb.from_(FM)
