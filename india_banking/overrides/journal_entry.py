@@ -57,7 +57,12 @@ def make_payment_order(source_name, target_doc=None, args=None):
 			bank_account = None
 
 			# If Supplier → fetch from Paty Bank Account
-			if party_type in ["Supplier", "Employee"]:
+			if party_type in ["Supplier", "Employee", "Development Apprentice Master"]:
+				if party_type == "Employee":
+					custom_apprentice  = frappe.db.get_value("Employee", party, "custom_apprentice")
+					if frappe.db.get_value("Employee", party, "custom_apprentice"):
+						party_type = "Development Apprentice Master"
+    
 				bank_account = frappe.get_value(
 					"Party Bank Account",
 					{
@@ -102,6 +107,8 @@ def make_payment_order(source_name, target_doc=None, args=None):
 				if msg not in invalid_party_details:
 					invalid_party_details.append(msg)
 			else:
+				if party_type == "Development Apprentice Master":
+					party_type = "Employee"
 				party_bank_details.update(
 					{(party_type, party): bank_account.name}
 				)
@@ -228,7 +235,7 @@ def make_payment_order(source_name, target_doc=None, args=None):
 				"reference_name": journal_account.parent,
 				"journal_entry_account": journal_account.name,
 				"amount": journal_account.payment_amount,
-				"party_type": journal_account.party_type,
+				# "party_type": journal_account.party_type,
 				"party": journal_account.party,
 				"mode_of_payment": "",
 				# "bank_account": journal_account.party_bank_account,
@@ -240,6 +247,15 @@ def make_payment_order(source_name, target_doc=None, args=None):
 				details["custom_supplier_bank_account"] = journal_account.party_bank_account
 			else:
 				details["bank_account"] = journal_account.party_bank_account
+
+			if journal_account.party_type == "Employee":
+				custom_apprentice  = frappe.db.get_value("Employee", journal_account.party, "custom_apprentice")
+				if frappe.db.get_value("Employee", journal_account.party, "custom_apprentice"):
+					details["party_type"] = "Development Apprentice Master"
+				else:
+					details["party_type"] = "Employee"
+			else:
+				details["party_type"] = journal_account.party_type
 			
 			details.update(_update_dimensions(journal_account))
 
