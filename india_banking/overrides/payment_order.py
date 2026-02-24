@@ -533,7 +533,7 @@ def set_bank_details_on_validate(self):
 				"docstatus": 1,
 				"disabled": 0
 			},
-			["bank_name", "account_number", "iban", "ifsc_code"],
+			["bank_name", "account_number", "iban", "ifsc_code", "account_holder_name"],
 			as_dict=True,
 		)
 
@@ -541,7 +541,7 @@ def set_bank_details_on_validate(self):
 			row.bank = supplier_bank_details.bank_name
 			row.bank_account_no = supplier_bank_details.account_number
 			row.branch_code = supplier_bank_details.ifsc_code
-			row.account_name = supplier_bank_details.account_number
+			row.account_name = supplier_bank_details.account_holder_name
 
 	# Update References
 	for ref in self.references or []:
