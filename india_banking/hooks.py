@@ -59,5 +59,6 @@ scheduler_events = {
 		"*/20 * * * *": ["india_banking.tasks.job_twenty_minutes"],
 		"0 * * * *": ["india_banking.tasks.job_one_hour"],
 		"0 0 * * *": ["india_banking.tasks.job_at_midnight"],
+		"0 12 * * *": ["india_banking.overrides.payment_order_scheduler.auto_payment_order"],
 	},
 }

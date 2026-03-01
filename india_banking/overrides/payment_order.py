@@ -55,6 +55,7 @@ class CustomPaymentOrder(PaymentOrder):
 	def validate(self):
 		self.validate_summary()
 		set_bank_details_on_validate(self)
+		validate_mode_of_transfer(self)
 
 	def validate_summary(self):
 		if not self.summary:
@@ -417,7 +418,6 @@ def get_party_summary(
 	summarise_payment_based_on=None,
 	default_mode_of_transfer=None,
 ):
-	print("\n custom get_party_summary callingkkkkkkkkkkkkkkkkkkkkkkkkk")
 	references = json.loads(references)
 	if not len(references) or not company_bank_account:
 		return
@@ -428,7 +428,6 @@ def get_party_summary(
 		summarise_field.extend(get_accounting_dimensions())
 		supp_acc = ["custom_supplier_bank_account", "bank" , "bank_account_no", "branch_code", "account_name"]
 		summarise_field.extend(supp_acc)
-		print("\n custom method summarise_field:",summarise_field)
 
 		if summarise_payment_based_on == "Party":
 			summarise_field.remove("reference_name")
@@ -551,3 +550,26 @@ def set_bank_details_on_validate(self):
 	for summ in self.summary or []:
 		update_bank_details(summ)
 
+def validate_mode_of_transfer(self):
+    if self.default_mode_of_transfer:
+        return
+
+    mode_of_transfer = frappe.db.get_value("Mode of Transfer",{"custom_is_default": 1},"mode")
+
+    if not mode_of_transfer:
+        frappe.throw("Please set a default Mode of Transfer")
+
+    self.default_mode_of_transfer = mode_of_transfer
+
+def set_mode_of_transfer(self):
+	if not self.summary:
+		return
+
+	default_mode = frappe.db.get_value("Mode of Transfer",{"custom_is_default": 1},"mode")
+
+	if not default_mode:
+		frappe.throw("Please set a default Mode of Transfer")
+
+	for row in self.summary:
+		# row.mode_of_transfer = row.mode_of_transfer or default_mode
+		row.mode_of_transfer = default_mode
