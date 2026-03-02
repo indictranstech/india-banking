@@ -43,7 +43,9 @@ doc_events = {
 		"validate": "india_banking.india_banking.doc_events.payment_entry.validate",
 	},
 	"Journal Entry": {
-		"validate": "india_banking.india_banking.doc_events.journal_entry.validate",
+		"validate": ["india_banking.india_banking.doc_events.journal_entry.validate",
+					"india_banking.overrides.journal_entry.validate"],
+		"on_submit": "india_banking.overrides.journal_entry.on_submit"
 	},
 }
 
