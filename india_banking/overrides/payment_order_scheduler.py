@@ -3,6 +3,7 @@ import json
 from india_banking.overrides.journal_entry import get_bank_entry, make_payment_order
 from india_banking.overrides.payment_order import get_party_summary
 from india_banking.india_banking.doctype.bank_connector.bank_connector import make_payment
+from frappe.utils import get_link_to_form
 
 def auto_payment_order():
 
@@ -65,6 +66,7 @@ def auto_payment_order_for_jv():
             # Add References
             for entry in jv_entries:
                 try:
+                    validate_party_bank_account(entry.get("name"))
                     payment_order = make_payment_order(
                         entry.get("name"),
                         target_doc=payment_order
@@ -141,3 +143,90 @@ def set_deafult_mode_of_transfer(row, sum_level=None):
         row.mode_of_transfer = default_mode
     else:
         row.default_mode_of_transfer = default_mode
+
+def validate_party_bank_account(entry_name):
+    invalid_party_details = []
+    party_bank_details = {}
+    jv_doc = frappe.get_doc("Journal Entry",entry_name)
+
+    for party_detail in jv_doc.accounts:
+        party_type = party_detail.party_type
+        party = party_detail.party
+
+        # party_type, party = party_detail.values()
+        msg = ""
+
+        if not party_type or not party:
+            continue
+
+        if (party_type, party) in party_bank_details:
+            continue
+
+        bank_account = None
+
+        # If Supplier → fetch from Paty Bank Account
+        if party_type in ["Supplier", "Employee", "Development Apprentice Master"]:
+            if party_type == "Employee":
+                custom_apprentice  = frappe.db.get_value("Employee", party, "custom_apprentice")
+                if frappe.db.get_value("Employee", party, "custom_apprentice"):
+                    party_type = "Development Apprentice Master"
+
+            bank_account = frappe.get_value(
+                "Party Bank Account",
+                {
+                    "party_type": party_type,
+                    "party" : party
+                },
+                ["name", "disabled", "is_default"],
+                as_dict=1,
+            )
+
+            doctype = "Party Bank Account"
+
+        # For other party types → fetch from Bank Account
+        else:
+            bank_account = frappe.get_value(
+                "Bank Account",
+                {
+                    "party_type": party_type,
+                    "party": party,
+                },
+                ["name", "disabled", "is_default"],
+                as_dict=1,
+            )
+
+            doctype = "Bank Account"
+
+        # Validations
+        if not bank_account:
+            msg += f"<b>{party_type}-{party}</b> does not have a {doctype}.<br>"
+
+        if bank_account and not bank_account.is_default:
+            msg += f"<b>{party_type}-{party}</b> has no default {doctype}.<br>"
+
+        if bank_account and bank_account.disabled:
+            bank_account_link = get_link_to_form(doctype, bank_account.name)
+            msg += (
+                f"<b>{party_type}-{party}</b> {doctype} "
+                f"{bank_account_link} is disabled.<br>"
+            )
+
+        #  Collect invalid details
+        if msg:
+            if msg not in invalid_party_details:
+                invalid_party_details.append(msg)
+
+        else:
+            if party_type == "Development Apprentice Master":
+                party_type = "Employee"
+            party_bank_details.update(
+                {(party_type, party): bank_account.name}
+            )
+
+    if invalid_party_details:
+        final_msg = "".join(invalid_party_details)
+
+        frappe.log_error(
+            title=f"Auto PO: Bank Account Validation Failed for JV {entry_name}",
+            message=final_msg
+        )
