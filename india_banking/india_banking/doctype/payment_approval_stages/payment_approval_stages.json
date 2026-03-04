@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-03-04 10:54:33.537792",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "from_amount",
+  "to_amount",
+  "approver_level",
+  "approver_role",
+  "approved_state"
+ ],
+ "fields": [
+  {
+   "fieldname": "from_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "From Amount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "to_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "To Amount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "approver_level",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Approver Level",
+   "reqd": 1
+  },
+  {
+   "fieldname": "approver_role",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Approver Role",
+   "options": "Role",
+   "reqd": 1
+  },
+  {
+   "fieldname": "approved_state",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Approved State",
+   "options": "Workflow State",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-03-04 16:39:06.836166",
+ "modified_by": "Administrator",
+ "module": "India Banking",
+ "name": "Payment Approval Stages",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
