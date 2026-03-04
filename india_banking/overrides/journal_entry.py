@@ -348,8 +348,20 @@ def get_bank_entry(doctype, txt, searchfield, start, page_len, filters, as_dict)
 	return query.run(as_dict=as_dict)
 
 def validate(doc, method):
-    if doc.voucher_type == "Bank Entry" and doc.custom_bank_entry_type == "H2H":
-        validate_bank_account(doc, from_scheduler =0)
+	if doc.voucher_type != "Bank Entry" and doc.custom_bank_entry_type != "H2H":
+		return
+
+	validate_bank_account(doc, from_scheduler =0)
+
+	if doc.workflow_state == "Pending" and doc.custom_current_approval_state == 0:
+		doc.custom_current_approval_state = 1
+
+	if doc.workflow_state in [ "Draft", "Pending"]:
+		return
+
+	level_dict = get_level_data_and_set_no_of_states(doc)
+
+	workflow_state_changes(doc, level_dict)
 
 def on_submit(doc, method):
     if doc.voucher_type == "Bank Entry" and doc.custom_bank_entry_type == "H2H":
@@ -577,3 +589,52 @@ def set_deafult_mode_of_transfer(row, sum_level=None):
 		row.mode_of_transfer = default_mode
 	else:
 		row.default_mode_of_transfer = default_mode
+
+def get_level_data_and_set_no_of_states(doc):
+
+	level_dict = {}
+
+	all_level = frappe.db.sql("""
+								SELECT approver_level, approver_role, approved_state
+								FROM `tabPayment Approval Stages`
+								WHERE from_amount <= %s AND to_amount >= %s order by approver_level asc
+							""", (doc.total_debit, doc.total_debit), as_dict=True)
+
+	for level in all_level:
+		level_dict[level.approver_level] = {
+											"approver_role": level.approver_role,
+											"approved_state": level.approved_state
+											}
+
+	max_level = max(level_dict.keys()) if level_dict else 0
+
+	if not doc.custom_no_of_states:
+		doc.custom_no_of_states = max_level
+
+	return level_dict
+
+def workflow_state_changes(doc, level_dict):
+
+	cur_state = doc.custom_current_approval_state
+	user_roles = frappe.get_roles()
+
+	# stop if current Approval State is reached to no. of states
+	if cur_state > doc.custom_no_of_states:
+		return
+
+	level_data = level_dict.get(cur_state) #level_data= {'approver_role':'Bank Payment Approver','approved_state':'Approved by Payment Approver'}
+
+	if not level_data:
+		frappe.throw(f"Approval configuration missing for level {cur_state} in Bank Payment Approval Settings")
+
+	approver_role = level_data.get("approver_role")
+	approved_state = level_data.get("approved_state")
+
+	# validate role
+	if approver_role not in user_roles:
+		frappe.throw(f"User must have role: {approver_role}")
+
+	# update workflow and add 1 in current approval state
+	doc.workflow_state = approved_state
+	if cur_state < doc.custom_no_of_states:
+		doc.custom_current_approval_state = cur_state + 1
