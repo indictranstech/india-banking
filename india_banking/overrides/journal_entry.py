@@ -9,46 +9,12 @@ from pypika.terms import ExistsCriterion
 from india_banking.overrides.payment_order import get_party_summary
 from india_banking.india_banking.doctype.bank_connector.bank_connector import make_payment
 from frappe.utils import get_link_to_form
+from frappe.model.mapper import get_mapped_doc
 import json
 
 
 @frappe.whitelist()
 def make_payment_order(source_name, target_doc=None, args=None):
-	from frappe.model.mapper import get_mapped_doc
-
-	# def validate_party_bank_account(
-	# 	party_details, party_bank_details, invalid_party_details
-	# ):
-	# 	for party_detail in party_details:
-	# 		party_type, party = party_detail.values()
-	# 		msg = ""
-	# 		if (party_type, party) in party_bank_details:
-	# 			continue
-
-	# 		bank_account = frappe.get_value(
-	# 			"Bank Account",
-	# 			{
-	# 				"party_type": party_type,
-	# 				"party": party,
-	# 			},
-	# 			["name", "disabled", "is_default"],
-	# 			as_dict=1,
-	# 		)
-
-	# 		if not bank_account:
-	# 			msg += f"<b>{party_type}-{party}</b> does not have a bank account.<br>"
-	# 		if bank_account and not bank_account.is_default:
-	# 			msg += f"<b>{party_type}-{party}</b> has no default bank account.<br>"
-	# 		if bank_account and bank_account.disabled:
-	# 			bank_account_link = get_link_to_form("Bank Account", bank_account.name)
-	# 			msg += f"<b>{party_type}-{party}</b> bank account {bank_account_link} is disabled.<br>"
-
-	# 		if msg:
-	# 			if msg not in invalid_party_details:
-	# 				invalid_party_details.append(msg)
-	# 		else:
-	# 			party_bank_details.update({(party_type, party): bank_account.name})
-
 
 	def validate_party_bank_account(party_details, party_bank_details, invalid_party_details):
 		for party_detail in party_details:
@@ -347,14 +313,9 @@ def get_bank_entry(doctype, txt, searchfield, start, page_len, filters, as_dict)
 
 	return query.run(as_dict=as_dict)
 
-def validate(doc, method):
-	if doc.voucher_type != "Bank Entry" and doc.custom_bank_entry_type != "H2H":
-		return
 
-	validate_bank_account(doc, from_scheduler =0)
 
-	level_list = validate_party_details_and_get_level(doc)
-	validate_workflow_approval(doc, level_list)
+
 
 def on_submit(doc, method):
     if doc.voucher_type == "Bank Entry" and doc.custom_bank_entry_type == "H2H":
@@ -477,6 +438,30 @@ def auto_payment_order_on_submit(self):
 		)
 		raise
 
+def set_deafult_mode_of_transfer(row, sum_level=None):
+	default_mode = frappe.db.get_value("Mode of Transfer",{"custom_is_default": 1},"mode")
+
+	if not default_mode:
+		# frappe.throw("Please set a default Mode of Transfer")
+		frappe.log_error(
+					f"Please set a default Mode of Transfer",
+					"Auto Payment Order JV"
+				)
+
+	if sum_level == 1:
+		row.mode_of_transfer = default_mode
+	else:
+		row.default_mode_of_transfer = default_mode
+
+
+def validate(doc, method):
+	if doc.voucher_type != "Bank Entry" and doc.custom_bank_entry_type != "H2H":
+		return
+	
+	validate_party_details(doc)
+	validate_bank_account(doc, from_scheduler =0)
+	validate_workflow_approval(doc)
+
 def validate_bank_account(doc ,from_scheduler = 0):
 	invalid_party_details = []
 	party_bank_details = {}
@@ -568,22 +553,9 @@ def validate_bank_account(doc ,from_scheduler = 0):
 		else:
 			frappe.throw(final_msg)
 
-def set_deafult_mode_of_transfer(row, sum_level=None):
-	default_mode = frappe.db.get_value("Mode of Transfer",{"custom_is_default": 1},"mode")
 
-	if not default_mode:
-		# frappe.throw("Please set a default Mode of Transfer")
-		frappe.log_error(
-					f"Please set a default Mode of Transfer",
-					"Auto Payment Order JV"
-				)
 
-	if sum_level == 1:
-		row.mode_of_transfer = default_mode
-	else:
-		row.default_mode_of_transfer = default_mode
-
-def validate_party_details_and_get_level(doc):
+def validate_party_details(doc):
 	level_list = []
 	party_set = set()
 	party_type_set = set()
@@ -606,9 +578,8 @@ def validate_party_details_and_get_level(doc):
 
 			party_set.add(party_key)
 
-			no_of_levels = get_no_of_levels(entry.debit, party_type)
+			no_of_levels = get_no_of_levels_for_range(entry.debit)
 			level_list.append(no_of_levels)
-
 	# check different party types in same entry
 	if len(party_type_set) > 1:
 		frappe.throw("Multiple Party Types are not allowed in one Bank Entry.")
@@ -617,27 +588,61 @@ def validate_party_details_and_get_level(doc):
 	if len(set(level_list)) > 1:
 		frappe.throw("Not Allow multiple Debit amount ranges in one Bank Entry.")
 
-	# safe return
-	return level_list[0] if level_list else 0
 
-
-def validate_workflow_approval(doc, no_of_levels):
+def validate_workflow_approval(doc):
 	if doc.workflow_state == "Pending" and doc.custom_current_approval_state == 0:
 		doc.custom_current_approval_state = 1
 
-	if doc.workflow_state in [ "Draft", "Pending"]:
-		return
+	level_dict = get_level_data_and_set_no_of_states(doc)
+	if doc.workflow_state not in ['Draft', 'Pending']:
+		workflow_state_changes(doc, level_dict)
 
-	level_dict = get_level_data_and_set_no_of_states(doc, no_of_levels)
 
-	workflow_state_changes(doc, level_dict)
 
-def get_level_data_and_set_no_of_states(doc, no_of_levels):
+def get_approval_leves_from_paymnet_setting(debit, party_type):
+	approval_levels = 0
+    # Get Bank Payment Approval Settings (Single Doctype)
+	settings = frappe.get_single("Bank Payment Approval Settings")
+
+    # Check Party Type Exceptions
+	for row in settings.party_type_exceptions:
+		if row.party_type == party_type:
+			return row.no_of_approval_levels
+
+    # Check Payment Approval Stages
+	for row in settings.payment_approval_stages:
+
+		from_amount = row.from_amount or 0
+		to_amount = row.to_amount or 0
+
+		# Case: No upper limit
+		if to_amount == 0:
+			if debit >= from_amount:
+				approval_levels = max(approval_levels, row.approver_level)
+
+		else:
+			if from_amount <= debit <= to_amount:
+				approval_levels = max(approval_levels, row.approver_level)
+
+	return approval_levels
+
+
+def get_level_data_and_set_no_of_states(doc):
 
 	level_dict = {}
 	all_level = []
+	no_of_levels = 0
+	max_debit = max((row.debit for row in doc.accounts if row.debit and row.debit > 0),default=0)
+	debit_rows = [d for d in doc.accounts if d.debit and d.debit > 0]
+	if debit_rows:
+		max_row = max(debit_rows, key=lambda x: x.debit)
 
-	# no_of_levels = get_no_of_levels(doc.total_debit, party_type)
+		max_debit = max_row.debit
+		party_type = max_row.party_type
+		party = max_row.party
+	if max_debit:
+		no_of_levels = get_approval_leves_from_paymnet_setting(max_debit, party_type)
+
 
 	if no_of_levels > 0:
 		all_level = frappe.db.sql("""
@@ -648,16 +653,15 @@ def get_level_data_and_set_no_of_states(doc, no_of_levels):
 								""", (no_of_levels,), as_dict=True)
 
 
-	for level in all_level:
-		level_dict[level.approver_level] = {
-											"approver_role": level.approver_role
-											}
+		for level in all_level:
+			level_dict[level.approver_level] = {
+												"approver_role": level.approver_role
+												}
 
 	max_level = max(level_dict.keys()) if level_dict else 0
 
-	if not doc.custom_no_of_states:
-		doc.custom_no_of_states = max_level
-
+	# if not doc.custom_no_of_states:
+	doc.custom_no_of_states = max_level
 	return level_dict
 
 def workflow_state_changes(doc, level_dict):
@@ -669,13 +673,11 @@ def workflow_state_changes(doc, level_dict):
 	if cur_state > doc.custom_no_of_states:
 		return
 
-	level_data = level_dict.get(cur_state) #level_data= {'approver_role':'Bank Payment Approver','approved_state':'Approved by Payment Approver'}
-
+	level_data = level_dict.get(cur_state) 
 	if not level_data:
 		frappe.throw(f"Approval configuration missing for level {cur_state} in Bank Payment Approval Settings")
 
 	approver_role = level_data.get("approver_role")
-	# approved_state = level_data.get("approved_state")
 
 	# validate role
 	if approver_role not in user_roles:
@@ -686,32 +688,13 @@ def workflow_state_changes(doc, level_dict):
 	if cur_state < doc.custom_no_of_states:
 		doc.custom_current_approval_state = cur_state + 1
 
-def get_no_of_levels(total_debit, party_type):
-	no_of_levels = 0
-
-	if party_type:
-		no_of_levels = frappe.db.get_value("Party Type Exceptions", {"party_type": party_type}, "no_of_approval_levels") or 0
-
-	# all_level = frappe.db.sql("""
-	# 							SELECT approver_level, approver_role, approved_state
-	# 							FROM `tabPayment Approval Stages`
-	# 							WHERE from_amount <= %s AND to_amount >= %s order by approver_level asc
-	# 						""", (doc.total_debit, doc.total_debit), as_dict=True)
-
-	if not no_of_levels:
-		level_data = frappe.db.sql("""
-									SELECT approver_level
-									FROM `tabPayment Approval Stages`
-									WHERE from_amount <= %s
-									AND (to_amount >= %s OR to_amount IS NULL OR to_amount = 0)
-									ORDER BY approver_level DESC
-									LIMIT 1
-								""", (total_debit, total_debit), as_dict=True)
-
-		if level_data:
-			no_of_levels = level_data[0].approver_level
-		else:
-			no_of_levels = 0
-
-	return no_of_levels
-
+def get_no_of_levels_for_range(total_debit):
+    return frappe.db.sql("""
+        SELECT COALESCE(MAX(approver_level), 0)
+        FROM `tabPayment Approval Stages`
+        WHERE from_amount <= %(amount)s
+        AND (
+            to_amount >= %(amount)s
+            OR IFNULL(to_amount, 0) = 0
+        )
+    """, {"amount": total_debit})[0][0]
