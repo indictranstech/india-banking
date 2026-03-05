@@ -586,6 +586,7 @@ def set_deafult_mode_of_transfer(row, sum_level=None):
 def validate_party_details_and_get_level(doc):
 	level_list = []
 	party_set = set()
+	party_type_set = set()
 
 	for entry in doc.accounts:
 		if entry.party_type and entry.party:
@@ -593,6 +594,8 @@ def validate_party_details_and_get_level(doc):
 			party_type = entry.party_type
 			if entry.party_type == "Development Apprentice Master":
 				party_type = "Employee"
+
+			party_type_set.add(entry.custom_party_type)
 
 			# duplicate check
 			party_key = (entry.party_type, entry.party)
@@ -605,6 +608,10 @@ def validate_party_details_and_get_level(doc):
 
 			no_of_levels = get_no_of_levels(entry.debit, party_type)
 			level_list.append(no_of_levels)
+
+	# check different party types in same entry
+	if len(party_type_set) > 1:
+		frappe.throw("Multiple Party Types are not allowed in one Bank Entry.")
 
 	# check multiple ranges
 	if len(set(level_list)) > 1:
