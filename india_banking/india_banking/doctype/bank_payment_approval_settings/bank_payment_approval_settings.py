@@ -27,25 +27,11 @@ def validate_payment_Approval_stages(doc):
 			frappe.throw(
 				f"Row {stage.idx}: To Amount is mandatory.")
 
-		# if stage.from_amount != max_from_amount and  not stage.to_amount:
-		# 		frappe.throw(
-		# 			f"Row {stage.idx}: To Amount is mandatory when From Amount "
-		# 			f"is different from max level From Amount ({max_from_amount})"
-
-
-		# 		)
 
 def validate_party_type_exceptions(doc):
-
-	level_data = frappe.db.sql("""
-								SELECT MAX(approver_level)
-								FROM `tabPayment Approval Stages`
-							""")[0][0] or 0
-
+	max_level = max([row.approver_level for row in doc.payment_approval_stages],default=0)
 	for row in doc.party_type_exceptions or []:
-
-		if (row.no_of_approval_levels > doc.max_no_of_approvers) or (row.no_of_approval_levels > level_data):
-
+		if (row.no_of_approval_levels > doc.max_no_of_approvers) or (row.no_of_approval_levels > max_level):
 			frappe.throw(
 				f"Row {row.idx}: No of Approval Level cannot be greater than Maximum No of Approvers or Approval stages."
 			)
