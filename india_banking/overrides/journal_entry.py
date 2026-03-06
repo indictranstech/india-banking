@@ -455,13 +455,14 @@ def set_deafult_mode_of_transfer(row, sum_level=None):
 
 
 def validate(doc, method):
-	if doc.voucher_type != "Bank Entry" and doc.custom_bank_entry_type != "H2H":
-		return
-	
-	validate_party_details(doc)
-	validate_bank_account(doc, from_scheduler =0)
-	validate_workflow_approval(doc)
+    if not (doc.voucher_type == "Bank Entry" and doc.custom_bank_entry_type == "H2H"):
+        return
 
+    validate_party_details(doc)
+    validate_bank_account(doc, from_scheduler=0)
+    validate_workflow_approval(doc)
+
+	
 def validate_bank_account(doc ,from_scheduler = 0):
 	invalid_party_details = []
 	party_bank_details = {}
@@ -495,7 +496,8 @@ def validate_bank_account(doc ,from_scheduler = 0):
 				"Party Bank Account",
 				{
 					"party_type": party_type,
-					"party" : party
+					"party" : party,
+					"docstatus" : 1
 				},
 				["name", "disabled", "is_default"],
 				as_dict=1,
