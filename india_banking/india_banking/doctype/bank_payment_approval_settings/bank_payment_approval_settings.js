@@ -23,3 +23,24 @@ frappe.ui.form.on('Bank Payment Approval Settings', {
 	}
 });
 
+frappe.ui.form.on("Payment Approval Stages", {
+
+	payment_approval_stages_add: function(frm, cdt, cdn) {
+
+		let row = frappe.get_doc(cdt, cdn);
+
+		row.approver_level = row.idx;
+
+		if (row.idx > 1){
+			let prev_row = frm.doc.payment_approval_stages[row.idx - 2];
+			if (!prev_row.to_amount){
+				frappe.msgprint("Please set To Amount in previous row first");
+				return;
+			}
+			row.from_amount = prev_row.to_amount + 1;
+		}
+
+		frm.refresh_field("payment_approval_stages");
+	}
+
+	});

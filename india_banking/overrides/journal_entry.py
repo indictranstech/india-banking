@@ -371,6 +371,7 @@ def auto_payment_order_on_submit(self):
 		payment_order.company_bank_account = bank_account
 		payment_order.account = bank_details.account
 		payment_order.bank = bank_details.bank
+		payment_order.custom_finance_book = self.finance_book
 
 		set_deafult_mode_of_transfer(payment_order, sum_level=0)
 
