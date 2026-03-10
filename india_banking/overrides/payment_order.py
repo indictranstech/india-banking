@@ -11,9 +11,44 @@ from frappe.utils import get_link_to_form, getdate
 from india_banking.default import PAYMENT_SUMMARY_FIELDS
 from india_banking.india_banking.doc_events.payment_order import make_payment_entries
 from india_banking.utils import validate_party_bank_account_details
+from pradan.pradan.utils import get_fiscal_year_details
+from frappe.model.naming import make_autoname
+
 
 
 class CustomPaymentOrder(PaymentOrder):
+	def autoname(self):
+		'''
+			Method to set naming according to Teams(Branch), Finance Book
+		'''
+		ref = next(
+			(row.reference_name for row in self.references
+				if row.reference_doctype == "Journal Entry" and row.reference_name),
+			None
+		)
+
+		if not ref:
+			self.name = make_autoname("PMO-.#####")
+			return
+
+		jv = frappe.db.get_value(
+			"Journal Entry", ref,
+			["custom_bank_entry_type", "voucher_type", "branch", "finance_book"],
+			as_dict=True
+		)
+
+		if jv and jv.voucher_type == "Bank Entry" and jv.custom_bank_entry_type == "H2H":
+
+			self.branch = jv.branch
+			self.custom_finance_book = jv.finance_book
+			if self.branch and self.custom_finance_book:
+				set_naming_series(self)
+			else:
+				frappe.throw("Teams and Finance Book are mandatory for H2H entries")
+
+		else:
+			self.name = make_autoname("PMO-.#####")
+
 	def before_submit(self):
 		if not frappe.get_single(
 			"India Banking Settings"
@@ -56,6 +91,8 @@ class CustomPaymentOrder(PaymentOrder):
 		self.validate_summary()
 		set_bank_details_on_validate(self)
 		validate_mode_of_transfer(self)
+		set_jv_reference_no_and_fc(self)
+
 
 	def validate_summary(self):
 		if not self.summary:
@@ -573,3 +610,41 @@ def set_mode_of_transfer(self):
 	for row in self.summary:
 		# row.mode_of_transfer = row.mode_of_transfer or default_mode
 		row.mode_of_transfer = default_mode
+
+def set_jv_reference_no_and_fc(self):
+	ref = next(
+		(row.reference_name for row in self.references
+			if row.reference_doctype == "Journal Entry" and row.reference_name),
+		None
+	)
+
+	if not ref:
+		return
+
+	jv = frappe.db.get_value(
+		"Journal Entry", ref,
+		["custom_bank_entry_type", "voucher_type", "branch", "finance_book"],
+		as_dict=True
+	)
+
+	if jv and jv.voucher_type == "Bank Entry" and jv.custom_bank_entry_type == "H2H":
+
+		if not self.custom_finance_book:
+			self.custom_finance_book = jv.finance_book or ""
+
+		frappe.db.set_value("Journal Entry", ref, "cheque_no", self.name)
+
+def set_naming_series(doc):
+
+	team_abbr = frappe.get_value("Branch", doc.branch, "custom_team_abbr") or ""
+	naming_series = 'PMO-'
+	if team_abbr:
+		naming_series += '{0}-'.format(team_abbr)
+	if doc.custom_finance_book:
+		naming_series += '{0}-'.format(doc.custom_finance_book)
+	if doc.posting_date:
+		fiscal_year = get_fiscal_year_details(getdate(doc.posting_date))
+		naming_series += '{0}-'.format(fiscal_year[0])
+	naming_series += ".#####"
+	doc.name = make_autoname(naming_series)
+
