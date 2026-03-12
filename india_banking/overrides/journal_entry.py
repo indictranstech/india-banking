@@ -597,7 +597,7 @@ def validate_workflow_approval(doc):
 		doc.custom_current_approval_state = 1
 
 	level_dict = get_level_data_and_set_no_of_states(doc)
-	if doc.workflow_state not in ['Draft', 'Pending']:
+	if doc.workflow_state and doc.workflow_state not in ['Draft', 'Pending']:
 		workflow_state_changes(doc, level_dict)
 
 

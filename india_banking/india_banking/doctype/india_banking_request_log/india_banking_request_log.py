@@ -55,7 +55,7 @@ def create_api_log(res, action=None, ref_doctype=None, ref_docname=None):
 		log_doc.status_code = res.status_code
 		log_doc.reference_doctype = ref_doctype
 		log_doc.reference_docname = ref_docname
-		log_doc.save()
+		log_doc.save(ignore_permission = True)
 	except:
 		frappe.log_error(
 			title="Error in creating API Log", message=frappe.get_traceback()
