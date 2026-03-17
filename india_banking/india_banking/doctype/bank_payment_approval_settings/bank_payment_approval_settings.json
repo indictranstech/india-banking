@@ -41,6 +41,7 @@
   },
   {
    "default": "0",
+   "depends_on": "eval: doc.use_regular_approval_flow_for_salary_entry",
    "fieldname": "is_exclude_head_office",
    "fieldtype": "Check",
    "label": "is exclude Head Office"
@@ -49,7 +50,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-17 11:24:38.477417",
+ "modified": "2026-03-17 13:21:10.697236",
  "modified_by": "Administrator",
  "module": "India Banking",
  "name": "Bank Payment Approval Settings",
