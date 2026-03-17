@@ -602,10 +602,39 @@ def validate_workflow_approval(doc):
 
 
 
-def get_approval_leves_from_paymnet_setting(debit, party_type):
+def get_approval_leves_from_paymnet_setting(debit, party_type, teams, user_remark):
 	approval_levels = 0
     # Get Bank Payment Approval Settings (Single Doctype)
 	settings = frappe.get_single("Bank Payment Approval Settings")
+
+	# Check Salary Entry
+	if user_remark and "Bank Entry created from Pay Slip Bank Entry" in user_remark:
+		if settings.use_regular_approval_flow_for_salary_entry:
+			max_approval_level = max(
+				(
+					row.approver_level
+					for row in settings.payment_approval_stages
+					if row.approver_level and row.approver_level > 0
+				),
+				default=0
+			)
+
+			if settings.is_exclude_head_office:
+				head_office = frappe.db.exists(
+					"Branch",
+					{
+						"name": teams,
+						"teams_type": "Head Office"
+					}
+				)
+
+				if head_office:
+					for row in settings.party_type_exceptions:
+						if row.party_type == party_type:
+							max_approval_level = row.no_of_approval_levels
+							break
+
+			return max_approval_level
 
     # Check Party Type Exceptions
 	for row in settings.party_type_exceptions:
@@ -644,7 +673,7 @@ def get_level_data_and_set_no_of_states(doc):
 		party_type = max_row.party_type
 		party = max_row.party
 	if max_debit:
-		no_of_levels = get_approval_leves_from_paymnet_setting(max_debit, party_type)
+		no_of_levels = get_approval_leves_from_paymnet_setting(max_debit, party_type, doc.branch, doc.user_remark)
 
 
 	if no_of_levels > 0:
