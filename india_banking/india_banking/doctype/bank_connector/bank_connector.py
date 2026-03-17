@@ -377,6 +377,9 @@ class BankConnector(Document):
 								"Failed",
 							)
 
+							#update failure flag in Pay Slip Bank Entry
+							update_pay_slip_bank_entry_failure_flag(summary.journal_entry_account)
+
 					elif status_details.status == "Rejected":
 						frappe.db.set_value(
 							"Payment Order Summary",
@@ -404,6 +407,9 @@ class BankConnector(Document):
 								"payment_status",
 								"Failed",
 							)
+
+						#update failure flag in Pay Slip Bank Entry
+						update_pay_slip_bank_entry_failure_flag(summary.journal_entry_account)
 
 			elif payment_status == "FAILED":
 				frappe.msgprint(
@@ -724,3 +730,21 @@ def get_bank_balance(bank_account_name):
 	bank_doc = frappe.get_doc("Bank Account", bank_account_name)
 	bank_connector = get_bank_connector(bank_account_name, bank_doc.company)
 	return bank_connector.get_bank_balance(bank_doc)
+
+@frappe.whitelist()
+def update_pay_slip_bank_entry_failure_flag(journal_entry_account):
+	jv = frappe.db.get_value(
+							"Journal Entry Account",
+							journal_entry_account,
+							"parent"
+							)
+
+	if jv:
+		frappe.db.set_value(
+							"JV Details",
+							{"jv_name": jv},
+							"failure_flag",
+							1,
+							update_modified=False
+						)
+		frappe.db.commit()
