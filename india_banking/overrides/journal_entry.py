@@ -424,8 +424,13 @@ def auto_payment_order_on_submit(self):
 		payment_order.insert(ignore_permissions=True)
 		payment_order.submit()
 
+		# frappe.msgprint(
+		# 	f"Payment Order {payment_order.name} created successfully."
+		# )
 		frappe.msgprint(
-			f"Payment Order {payment_order.name} created successfully."
+			msg=f"Payment Order {get_link_to_form('Payment Order', payment_order.name)} created successfully.",
+			title="Success",
+			indicator="green"
 		)
 		frappe.db.commit()
 
@@ -459,7 +464,9 @@ def validate(doc, method):
     if not (doc.voucher_type == "Bank Entry" and doc.custom_bank_entry_type == "H2H"):
         return
 
-    validate_party_details(doc)
+    if not doc.custom_pay_slip_bank_entry:
+        validate_party_details(doc)
+
     validate_bank_account(doc, from_scheduler=0)
     validate_workflow_approval(doc)
 
