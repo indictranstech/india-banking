@@ -602,13 +602,14 @@ def validate_workflow_approval(doc):
 
 
 
-def get_approval_leves_from_paymnet_setting(debit, party_type, teams, user_remark):
+def get_approval_leves_from_paymnet_setting(debit, party_type, teams, pay_slip_bank_entry):
 	approval_levels = 0
     # Get Bank Payment Approval Settings (Single Doctype)
 	settings = frappe.get_single("Bank Payment Approval Settings")
 
 	# Check Salary Entry
-	if user_remark and "Bank Entry created from Pay Slip Bank Entry" in user_remark:
+	# if user_remark and "Bank Entry created from Pay Slip Bank Entry" in user_remark:
+	if pay_slip_bank_entry:
 		if settings.use_regular_approval_flow_for_salary_entry:
 			max_approval_level = max(
 				(
@@ -673,7 +674,7 @@ def get_level_data_and_set_no_of_states(doc):
 		party_type = max_row.party_type
 		party = max_row.party
 	if max_debit:
-		no_of_levels = get_approval_leves_from_paymnet_setting(max_debit, party_type, doc.branch, doc.user_remark)
+		no_of_levels = get_approval_leves_from_paymnet_setting(max_debit, party_type, doc.branch, doc.custom_pay_slip_bank_entry)
 
 
 	if no_of_levels > 0:
