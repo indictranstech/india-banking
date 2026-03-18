@@ -464,7 +464,9 @@ def validate(doc, method):
     if not (doc.voucher_type == "Bank Entry" and doc.custom_bank_entry_type == "H2H"):
         return
 
-    validate_party_details(doc)
+    if not doc.custom_pay_slip_bank_entry:
+        validate_party_details(doc)
+
     validate_bank_account(doc, from_scheduler=0)
     validate_workflow_approval(doc)
 
