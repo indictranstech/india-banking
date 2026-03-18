@@ -733,18 +733,36 @@ def get_bank_balance(bank_account_name):
 
 @frappe.whitelist()
 def update_pay_slip_bank_entry_failure_flag(journal_entry_account):
-	jv = frappe.db.get_value(
-							"Journal Entry Account",
-							journal_entry_account,
-							"parent"
-							)
 
-	if jv:
+	jv_row_details = frappe.db.get_value(
+										"Journal Entry Account",
+										journal_entry_account,
+										["parent", "custom_party_type", "custom_party", "debit"],
+										as_dict=True
+									)
+
+	if not jv_row_details:
+		return
+
+	pay_slip_bank_entry = frappe.db.get_value(
+												"Journal Entry",
+												jv_row_details.parent,
+												"custom_pay_slip_bank_entry"
+											)
+
+	if pay_slip_bank_entry:
+
 		frappe.db.set_value(
 							"JV Details",
-							{"jv_name": jv},
+							{
+								"parent": pay_slip_bank_entry,
+								"party_type": jv_row_details.custom_party_type,
+								"party": jv_row_details.custom_party,
+								"amount": jv_row_details.debit
+							},
 							"failure_flag",
 							1,
 							update_modified=False
 						)
+
 		frappe.db.commit()
