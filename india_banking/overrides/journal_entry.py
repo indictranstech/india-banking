@@ -424,8 +424,13 @@ def auto_payment_order_on_submit(self):
 		payment_order.insert(ignore_permissions=True)
 		payment_order.submit()
 
+		# frappe.msgprint(
+		# 	f"Payment Order {payment_order.name} created successfully."
+		# )
 		frappe.msgprint(
-			f"Payment Order {payment_order.name} created successfully."
+			msg=f"Payment Order {get_link_to_form('Payment Order', payment_order.name)} created successfully.",
+			title="Success",
+			indicator="green"
 		)
 		frappe.db.commit()
 
