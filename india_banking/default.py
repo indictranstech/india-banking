@@ -58,6 +58,7 @@ STD_BANK_LIST = [
 	"ICICI Bank",
 	"Kotak Mahindra Bank",
 	"HSBC Bank",
+    "Axis Bank Ltd."
 ]
 
 BANK_ADDRESS_MANDATORY_BANKS = [
@@ -75,7 +76,7 @@ DEFAULT_WORKFLOW_STATE = [
 	"Approved",
 ]
 
-H2H_ENABLED_BANK = ["HSBC Bank", "Axis Bank"]
+H2H_ENABLED_BANK = ["HSBC Bank", "Axis Bank", "Axis Bank Ltd."]
 
 DEFAULT_WORKFLOW_ACTIONS = ["Approve", "Reject"]
 
