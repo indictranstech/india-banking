@@ -21,11 +21,11 @@ def after_install():
 	create_property_setter()
 	toggle_reqd_for_reference_in_payment_order(False)
 	create_default_mode_of_transfers()
-	# create_default_payment_type()
+	create_default_payment_type()
 	create_default_workflow()
-	# create_default_bank()
-	# update_allowed_payment_doctypes()
-	# create_default_roles()
+	create_default_bank()
+	update_allowed_payment_doctypes()
+	create_default_roles()
 
 
 def make_custom_fields():
