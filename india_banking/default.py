@@ -75,7 +75,7 @@ DEFAULT_WORKFLOW_STATE = [
 	"Approved",
 ]
 
-H2H_ENABLED_BANK = ["HSBC Bank"]
+H2H_ENABLED_BANK = ["HSBC Bank", "Axis Bank"]
 
 DEFAULT_WORKFLOW_ACTIONS = ["Approve", "Reject"]
 
