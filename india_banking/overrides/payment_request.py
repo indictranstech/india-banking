@@ -6,16 +6,17 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 from erpnext.accounts.doctype.payment_request.payment_request import (
 	PaymentRequest,
 )
-from erpnext.accounts.doctype.tax_withholding_category.tax_withholding_category import (
-	get_party_tax_withholding_details,
-)
+# from erpnext.accounts.doctype.tax_withholding_category.tax_withholding_category import (
+# 	get_party_tax_withholding_details,
+# )
 from erpnext.accounts.party import (
 	get_party_account,
 	get_party_account_currency,
-	get_party_bank_account,
+	# get_party_bank_account,
 )
+from india_banking.utils import get_party_bank_account
 from frappe import _, bold
-from frappe.utils import get_link_to_form, getdate
+from frappe.utils import get_link_to_form, getdate, cint
 
 from india_banking.utils import validate_party_bank_account_details
 
@@ -397,3 +398,173 @@ def set_supplier_bank_details(self, method=None):
 	self.bank_account_no = supplier_bank_details.account_number
 	self.branch_code = supplier_bank_details.ifsc_code
 	self.iban = supplier_bank_details.iban
+
+def get_party_tax_withholding_details(inv, tax_withholding_category=None):
+	if inv.doctype == "Payment Entry":
+		inv.tax_withholding_net_total = inv.net_total
+
+	pan_no = ""
+	parties = []
+	party_type, party = get_party_details(inv)
+	has_pan_field = frappe.get_meta(party_type).has_field("pan")
+
+	if not tax_withholding_category:
+		if has_pan_field:
+			fields = ["tax_withholding_category", "pan"]
+		else:
+			fields = ["tax_withholding_category"]
+
+		tax_withholding_details = frappe.db.get_value(party_type, party, fields, as_dict=1)
+
+		tax_withholding_category = tax_withholding_details.get("tax_withholding_category")
+		pan_no = tax_withholding_details.get("pan")
+
+	if not tax_withholding_category:
+		return
+
+	# if tax_withholding_category passed as an argument but not pan_no
+	if not pan_no and has_pan_field:
+		pan_no = frappe.db.get_value(party_type, party, "pan")
+
+	# Get others suppliers with the same PAN No
+	if pan_no:
+		parties = frappe.get_all(party_type, filters={"pan": pan_no}, pluck="name")
+
+	if not parties:
+		parties.append(party)
+
+	posting_date = inv.get("posting_date") or inv.get("transaction_date")
+	tax_details = get_tax_withholding_details(tax_withholding_category, posting_date, inv.company)
+
+	if not tax_details:
+		frappe.throw(
+			_("Please set associated account in Tax Withholding Category {0} against Company {1}").format(
+				tax_withholding_category, inv.company
+			)
+		)
+
+	if party_type == "Customer" and not tax_details.cumulative_threshold:
+		# TCS is only chargeable on sum of invoiced value
+		frappe.throw(
+			_(
+				"Tax Withholding Category {} against Company {} for Customer {} should have Cumulative Threshold value."
+			).format(tax_withholding_category, inv.company, party)
+		)
+
+	tax_amount, tax_deducted, tax_deducted_on_advances, voucher_wise_amount = get_tax_amount(
+		party_type, parties, inv, tax_details, posting_date, pan_no
+	)
+
+	if party_type == "Supplier":
+		tax_row = get_tax_row_for_tds(tax_details, tax_amount)
+	else:
+		tax_row = get_tax_row_for_tcs(inv, tax_details, tax_amount, tax_deducted)
+
+	cost_center = get_cost_center(inv)
+	tax_row.update({"cost_center": cost_center})
+
+	if cint(tax_details.round_off_tax_amount):
+		inv.round_off_applicable_accounts_for_tax_withholding = tax_details.account_head
+
+	if inv.doctype == "Purchase Invoice":
+		return tax_row, tax_deducted_on_advances, voucher_wise_amount
+	else:
+		return tax_row
+
+def get_party_details(inv):
+	party_type, party = "", ""
+
+	if inv.doctype == "Sales Invoice":
+		party_type = "Customer"
+		party = inv.customer
+	else:
+		party_type = "Supplier"
+		party = inv.supplier
+
+	if not party:
+		frappe.throw(_("Please select {0} first").format(party_type))
+
+	return party_type, party
+
+def get_cost_center(inv):
+	cost_center = frappe.get_cached_value("Company", inv.company, "cost_center")
+
+	if len(inv.get("taxes", [])) > 0:
+		cost_center = inv.get("taxes")[0].cost_center
+
+	return cost_center
+
+
+def get_tax_withholding_details(tax_withholding_category, posting_date, company):
+	tax_withholding = frappe.get_doc("Tax Withholding Category", tax_withholding_category)
+
+	tax_rate_detail = get_tax_withholding_rates(tax_withholding, posting_date)
+
+	for account_detail in tax_withholding.accounts:
+		if company == account_detail.company:
+			return frappe._dict(
+				{
+					"tax_withholding_category": tax_withholding_category,
+					"account_head": account_detail.account,
+					"rate": tax_rate_detail.tax_withholding_rate,
+					"from_date": tax_rate_detail.from_date,
+					"to_date": tax_rate_detail.to_date,
+					"threshold": tax_rate_detail.single_threshold,
+					"cumulative_threshold": tax_rate_detail.cumulative_threshold,
+					"description": tax_withholding.category_name
+					if tax_withholding.category_name
+					else tax_withholding_category,
+					"consider_party_ledger_amount": tax_withholding.consider_party_ledger_amount,
+					"tax_on_excess_amount": tax_withholding.tax_on_excess_amount,
+					"round_off_tax_amount": tax_withholding.round_off_tax_amount,
+				}
+			)
+
+def get_tax_withholding_rates(tax_withholding, posting_date):
+	# returns the row that matches with the fiscal year from posting date
+	for rate in tax_withholding.rates:
+		if getdate(rate.from_date) <= getdate(posting_date) <= getdate(rate.to_date):
+			return rate
+
+	frappe.throw(_("No Tax Withholding data found for the current posting date."))
+
+
+def get_tax_row_for_tcs(inv, tax_details, tax_amount, tax_deducted):
+	row = {
+		"category": "Total",
+		"charge_type": "Actual",
+		"tax_amount": tax_amount,
+		"description": tax_details.description,
+		"account_head": tax_details.account_head,
+	}
+
+	if tax_deducted:
+		# TCS already deducted on previous invoices
+		# So, TCS will be calculated by 'Previous Row Total'
+
+		taxes_excluding_tcs = [d for d in inv.taxes if d.account_head != tax_details.account_head]
+		if taxes_excluding_tcs:
+			# chargeable amount is the total amount after other charges are applied
+			row.update(
+				{
+					"charge_type": "On Previous Row Total",
+					"row_id": len(taxes_excluding_tcs),
+					"rate": tax_details.rate,
+				}
+			)
+		else:
+			# if only TCS is to be charged, then net total is chargeable amount
+			row.update({"charge_type": "On Net Total", "rate": tax_details.rate})
+
+	return row
+
+
+def get_tax_row_for_tds(tax_details, tax_amount):
+	return {
+		"category": "Total",
+		"charge_type": "Actual",
+		"tax_amount": tax_amount,
+		"add_deduct_tax": "Deduct",
+		"description": tax_details.description,
+		"account_head": tax_details.account_head,
+	}

@@ -10,10 +10,14 @@ from erpnext.accounts.doctype.payment_request.payment_request import (
 	PaymentRequest,
 	get_existing_payment_request_amount,
 )
-from erpnext.accounts.doctype.tax_withholding_category.tax_withholding_category import (
-	get_party_tax_withholding_details,
-)
-from erpnext.accounts.party import get_party_bank_account
+# from erpnext.accounts.doctype.tax_withholding_category.tax_withholding_category import (
+# 	get_party_tax_withholding_details,
+# )
+from india_banking.overrides.payment_request import get_party_tax_withholding_details
+
+# from erpnext.accounts.party import get_party_bank_account
+from india_banking.utils import get_party_bank_account
+
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils.data import cstr, flt, today
